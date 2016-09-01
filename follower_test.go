@@ -1,0 +1,64 @@
+package binlog
+
+import (
+	"os"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
+)
+
+func TestMakeBinlogDumpCommand(t *testing.T) {
+	p := Position{Name: "mysql-bin.000001", Pos: 4}
+	followerID := uint32(200)
+	want := []byte{0x0, 0x0, 0x0, 0x0, 0x12, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0, 0xc8, 0x0, 0x0, 0x0, 0x6d, 0x79, 0x73, 0x71, 0x6c, 0x2d, 0x62, 0x69, 0x6e, 0x2e, 0x30, 0x30, 0x30, 0x30, 0x30, 0x31}
+	output := makeBinlogDumpCommand(p, followerID)
+
+	assert.Equal(t, output, want)
+}
+
+func TestMakeRegisterFollowerCommand(t *testing.T) {
+	want := []byte{0x0, 0x0, 0x0, 0x0, 0x15, 0xe8, 0x3, 0x0, 0x0, 0xc, 0x72, 0x65, 0x61, 0x6c, 0x66, 0x6f, 0x6c, 0x6c, 0x6f, 0x77, 0x65, 0x72, 0x5, 0x61, 0x64, 0x6d, 0x69, 0x6e, 0x8, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72, 0x64, 0xea, 0xc, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
+	output := makeRegisterFollowerCommand("realfollower", uint16(3306), "admin", "password", uint32(1000), uint32(0))
+
+	assert.Equal(t, output, want)
+}
+
+func TestMakeSemiSyncAck(t *testing.T) {
+	p := Position{Name: "mysql-bin.000001", Pos: 4}
+	want := []byte{0x0, 0x0, 0x0, 0x0, 0xef, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x6d, 0x79, 0x73, 0x71, 0x6c, 0x2d, 0x62, 0x69, 0x6e, 0x2e, 0x30, 0x30, 0x30, 0x30, 0x30, 0x31}
+	output := makeSemiSyncAck(p)
+
+	assert.Equal(t, output, want)
+}
+
+type FollowerTestSuite struct {
+	suite.Suite
+	follower *Follower
+}
+
+func TestFollowerTestSuite(t *testing.T) {
+	suite.Run(t, new(FollowerTestSuite))
+}
+
+var followerID = uint32(999)
+
+func (suite *FollowerTestSuite) TestFollowerDefaultSettingsAreCorrect() {
+	assert.Equal(suite.T(), suite.follower.followerID, followerID)
+	assert.Equal(suite.T(), suite.follower.masterID, uint32(0))
+	assert.False(suite.T(), suite.follower.running)
+	assert.False(suite.T(), suite.follower.semiSyncEnabled)
+}
+
+func (suite *FollowerTestSuite) TestFollowerHostnameIsCorrect() {
+	h, _ := os.Hostname()
+	assert.Equal(suite.T(), suite.follower.Hostname(), h)
+}
+
+func (suite *FollowerTestSuite) SetupSuite() {
+	suite.follower = NewFollower(followerID)
+}
+
+func (suite *FollowerTestSuite) TearDownSuite() {
+	suite.follower.Close()
+}
